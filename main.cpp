@@ -8,6 +8,8 @@
 #include <cmath>
 #include <random>
 #include <utility>
+#include <memory>
+
 
 uint32_t get_random_number(uint32_t min, uint32_t max)
 {
@@ -21,7 +23,6 @@ class Exp_sketch {
 public:
     Exp_sketch(uint32_t sketch_size) : sketch(std::vector<double>(sketch_size, std::numeric_limits<double>::infinity()))
     {
-        std::cout << "Basic ExpSketch" << std::endl;
     }
 
     void update_sketch(const std::vector<std::pair<uint32_t, uint32_t>>& multiset)
@@ -85,12 +86,12 @@ private:
 
 class DF_exp_sketch : public Exp_sketch {
 public:
-    DF_exp_sketch(double epsilon, uint32_t max_attribute, uint32_t sketch_size) :
+    DF_exp_sketch(uint32_t sketch_size, double epsilon, uint32_t max_attribute) :
         Exp_sketch(sketch_size),
         _large_attribute(get_large_attribute(epsilon, max_attribute)),
         _max_exp_sketch_value(get_max_exp_sketch_value(epsilon, max_attribute))
     {
-        std::cout << "DF ExpSketch with m * epsilon: " << epsilon * static_cast<double>(sketch_size) << std::endl;
+        std::cout << "DF ExpSketch with m * epsilon: " << epsilon * static_cast<double>(sketch_size) << ", _large_attribute: " << _large_attribute << std::endl;
 
         const uint32_t unique_identifier = std::numeric_limits<uint32_t>::max();
         std::vector<std::pair<uint32_t, uint32_t>> multiset = {std::make_pair(unique_identifier, _large_attribute)};
@@ -98,7 +99,7 @@ public:
         update_sketch(multiset);
     }
 
-    double estimate() override
+    virtual double estimate() override
     {
         double G_m = 0;
 
@@ -172,7 +173,6 @@ uint64_t sum_of_unique_elements(uint32_t* multiset, uint32_t size)
 
 
 int main() {
-
     std::vector<std::pair<uint32_t, uint32_t>> multiset;
 
     const double epsilon = 0.04;
@@ -198,18 +198,20 @@ int main() {
 
     std::cout << "The multiset has been created." << std::endl;
 
-    std::vector<Exp_sketch> sketches = {DF_exp_sketch(epsilon, max_attribute, sketch_size), Exp_sketch(sketch_size)};
+    std::vector<std::unique_ptr<Exp_sketch>> sketches;
+    sketches.push_back(std::make_unique<DF_exp_sketch>(sketch_size, epsilon, max_attribute));
+    sketches.push_back(std::make_unique<Exp_sketch>(sketch_size));
+
+    double exact_sum = static_cast<double>(sum_of_unique_elements);
+    std::cout << "exact_sum: " << exact_sum << std::endl;
 
     for (auto& sketch : sketches)
     {
-        sketch.update_sketch(multiset);
-        double estimated_sum = sketch.estimate();
-        double exact_sum = static_cast<double>(sum_of_unique_elements);
+        sketch->update_sketch(multiset);
+        double estimated_sum = sketch->estimate();
 
-
-        std::cout << "exact_sum: " << exact_sum << std::endl;
         std::cout << "Sum estimated by sketch: " << estimated_sum<< ", div:" << fabs(estimated_sum - exact_sum)/exact_sum * 100.0 << "%" << std::endl;
-
     }
+
     return 0;
 }
